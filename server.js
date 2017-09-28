@@ -104,7 +104,6 @@ function initWeb() {
     router.use(express.static(path.resolve(__dirname, 'static')))
 
     router.get('/event', (req, res) => {
-        console.log(req.query)
         let q = {
             attributes: [
                 'id',
@@ -113,6 +112,7 @@ function initWeb() {
                 'src',
                 'data',
             ],
+            where: {},
             raw: true,
             offset: 0,
             limit: 1000,
@@ -121,6 +121,12 @@ function initWeb() {
             q.offset = parseInt(req.query.offset)
         if ('limit' in req.query && req.query.limit <= q.limit)
             q.limit = parseInt(req.query.limit)
+        if ('src' in req.query)
+            q.where.src = req.query.src.toUpperCase()
+        if ('type' in req.query)
+            q.where.type = req.query.type
+        if ('reverse' in req.query)
+            q.order = [['id', 'DESC']]
         db.Event.findAll(q).then(results => {
             results = results.map(x => {
                 x.data = JSON.parse(x.data)
