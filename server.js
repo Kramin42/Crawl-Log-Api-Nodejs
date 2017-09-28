@@ -1,24 +1,23 @@
-var http = require('http');
-var path = require('path');
+var express = require('express')
+var http = require('http')
+var path = require('path')
 var fs   = require( 'mz/fs' )
 var shell = require('shelljs')
-//var Promise = require("bluebird");
-var request = require('request-promise');
-
 var exec = require('child_process').exec
-var async = require('async');
-var io = require('socket.io');
-var express = require('express');
 
-var env       = process.env.NODE_ENV || 'development';
-var config    = require(__dirname + '/config/config.json')[env];
+var router = express()
+var server = http.createServer(router)
+var io = require('socket.io')(server)
+
+var env = process.env.NODE_ENV || 'development';
+var config = require(__dirname + '/config/config.json')[env];
 var db = require("./models");
 
 var chunk_size = 1024*1024
 
 function main() {
-    initDownloader()
     initWeb()
+    initDownloader()
 }
 
 function initDownloader() {
@@ -92,6 +91,7 @@ function processLine(t, file, line) {
         .reduce(function(prev,curr){prev[curr[0]]=curr[1];return prev;},{})
     let rtime = lineObject['time'] || lineObject['end']
     let date = new Date(`${rtime.slice(0,4)}/${parseInt(rtime.slice(4,6))+1}/${rtime.slice(6,8)} ${rtime.slice(8,10)}:${rtime.slice(10,12)}:${rtime.slice(12,14)}`)
+    io.emit('crawlevent', JSON.stringify([lineObject]))
     return db.Event.create({
             type: file.type,
             date: date,
@@ -101,9 +101,48 @@ function processLine(t, file, line) {
 }
 
 function initWeb() {
-    var router = express()
-    var server = http.createServer(router)
-    router.use(express.static(path.resolve(__dirname, 'client')))
+    router.use(express.static(path.resolve(__dirname, 'static')))
+
+    router.get('/event', (req, res) => {
+        console.log(req.query)
+        let q = {
+            attributes: [
+                'id',
+                'type',
+                'date',
+                'src',
+                'data',
+            ],
+            raw: true,
+            offset: 0,
+            limit: 1000,
+        }
+        if ('offset' in req.query)
+            q.offset = parseInt(req.query.offset)
+        if ('limit' in req.query && req.query.limit <= q.limit)
+            q.limit = parseInt(req.query.limit)
+        db.Event.findAll(q).then(results => {
+            results = results.map(x => {
+                x.data = JSON.parse(x.data)
+                x.time = Math.round(new Date(x.date).getTime()/1000)
+                delete x.date
+                x.src_abbr = x.src
+                delete x.src
+                return x
+            })
+            let response = {
+                status: 200,
+                message: 'OK',
+                offset: q.offset,
+                next_offset: q.offset + results.length,
+                results: results,
+            }
+            res.type('application/json')
+            res.send(response)
+        })
+    })
+
+    io.on('connection', () => console.log('socketio client connected'))
     
     server.listen(process.env.OPENSHIFT_NODEJS_PORT || process.env.PORT || config.port, process.env.OPENSHIFT_NODEJS_IP || process.env.IP || config.host, function(){
         var addr = server.address()

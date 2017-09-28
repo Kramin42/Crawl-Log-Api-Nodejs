@@ -1,0 +1,14 @@
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
+<script type="text/javascript" charset="utf-8">
+    var socket = io.connect(document.domain + ':' + location.port);
+    socket.on('connect', function() {
+        document.getElementById("eventlist").innerHTML+="<li>connected</li>";
+    });
+    socket.on('crawlevent', function(data) {
+        data = JSON.parse(data);
+        data.forEach(function(event) {
+            document.getElementById("eventlist").innerHTML+="<li>"+JSON.stringify(event)+"</li>";
+        });
+    });
+</script>
+<ul id="eventlist"></ul>
