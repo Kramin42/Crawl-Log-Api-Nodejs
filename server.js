@@ -11,7 +11,8 @@ var io = require('socket.io')(server)
 
 var env = process.env.NODE_ENV || 'development';
 var config = require(__dirname + '/config/config.json')[env];
-var db = require("./models");
+var db = require("./models")
+var Sequelize = require('sequelize')
 
 var chunk_size = 1024*1024
 
@@ -47,34 +48,39 @@ function initDownloader() {
 }
 
 function parseEvents(file, fd, accu) {
+    //console.log('parsing file',file.url)
     //if (accu != '') console.log('ACCU:', accu)
     let stats = fs.fstatSync(fd)
-    if (stats.size <= file.offset + accu.length) {
+    if (stats.size <= parseInt(file.offset) + accu.length) {
+        //console.log(stats.size, '<=', file.offset)
         // wait 0.5 sec and try again
         setTimeout(() => parseEvents(file, fd, accu), 500)
     } else {
-        fs.read(fd, new Buffer(chunk_size), 0, chunk_size, file.offset + accu.length)
+        fs.read(fd, new Buffer(chunk_size), 0, chunk_size, parseInt(file.offset) + accu.length)
             .then(([bytesRead, buffer]) => {
                 //console.log(bytesRead, buffer)
                 accu += buffer.toString('utf-8', 0, bytesRead)
                 let lines = accu.split(/\r?\n/)
+                //console.log('processing',lines,'lines from',file.url)
                 let newAccu = lines.pop()
                 return db.sequelize.transaction().then(t => {
                     // now consume all complete lines
                     let ps = []
-                    file.offset += accu.length - newAccu.length
+                    file.offset = parseInt(file.offset) + accu.length - newAccu.length
                     ps.push(file.save({transaction: t}))
                     for (let line of lines){
                         ps.push(processLine(t, file, line))
                     }
                     return Promise.all(ps)
                         .then(() => t.commit())
-                        .then(() => parseEvents(file, fd, newAccu))
                         // in case of some error, rollback
                         .catch(err => {
                             t.rollback()
-                            throw err
+                            console.log(err)
+                            console.log(lines)
+                            return wait(60000)() // in case the error repeats, dont spam
                         })
+                        .then(() => parseEvents(file, fd, newAccu))
                 })
             })
     }
@@ -89,8 +95,15 @@ function processLine(t, file, line) {
         .map(x => x.replace(/\|COLON\|/g,':').split(/=/))
         .reduce(function(prev,curr){prev[curr[0]]=curr[1];return prev;},{})
     if (lineObject['type']==='crash') return Promise.resolve()
-    let rtime = lineObject['time'] || lineObject['end'] || '19700001000000S'
-    let date = new Date(`${rtime.slice(0,4)}/${parseInt(rtime.slice(4,6))+1}/${rtime.slice(6,8)} ${rtime.slice(8,10)}:${rtime.slice(10,12)}:${rtime.slice(12,14)}`)
+    let rtime = lineObject['time'] || lineObject['end']
+    let date = new Date(0)
+    try {
+        date = new Date(`${rtime.slice(0,4)}/${parseInt(rtime.slice(4,6))+1}/${rtime.slice(6,8)} ${rtime.slice(8,10)}:${rtime.slice(10,12)}:${rtime.slice(12,14)}`)
+        if (date == 'Invalid Date') date = new Date(0)
+    } catch (err) {
+        //console.log('Invalid Date')
+        date = new Date(0)
+    }
     io.emit('crawlevent', JSON.stringify([lineObject]))
     return db.Event.create({
             type: file.type,

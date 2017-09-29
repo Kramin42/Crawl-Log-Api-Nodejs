@@ -4,7 +4,7 @@ module.exports = (sequelize, DataTypes) => {
     src: DataTypes.STRING,
     url: DataTypes.STRING,
     type: DataTypes.STRING,
-    offset: DataTypes.INTEGER,
+    offset: DataTypes.BIGINT,
     period: DataTypes.INTEGER
   }, {
     classMethods: {
