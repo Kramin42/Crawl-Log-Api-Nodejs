@@ -127,11 +127,10 @@ function initWeb() {
             ],
             where: {},
             raw: true,
-            offset: 0,
             limit: 1000,
         }
         if ('offset' in req.query)
-            q.offset = parseInt(req.query.offset)
+            q.where.id = {$gte: parseInt(req.query.offset)}
         if ('limit' in req.query && req.query.limit <= q.limit)
             q.limit = parseInt(req.query.limit)
         if ('src' in req.query)
@@ -140,6 +139,8 @@ function initWeb() {
             q.where.type = req.query.type
         if ('reverse' in req.query)
             q.order = [['id', 'DESC']]
+        else
+            q.order = [['id', 'ASC']]
         db.Event.findAll(q).then(results => {
             results = results.map(x => {
                 x.data = JSON.parse(x.data)
@@ -153,7 +154,7 @@ function initWeb() {
                 status: 200,
                 message: 'OK',
                 offset: q.offset,
-                next_offset: q.offset + results.length,
+                next_offset: results[results.length-1].id + 1,
                 results: results,
             }
             res.type('application/json')
