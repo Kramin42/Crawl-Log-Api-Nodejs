@@ -115,7 +115,7 @@ let servers = [
       'https://crawl.project357.org',
       {
         milestone: '/dcss-milestones-',
-        game: '/dcss-logfile-',
+        game: '/dcss-logfiles-',
       },
       {
         fast: ['trunk','0.20'],

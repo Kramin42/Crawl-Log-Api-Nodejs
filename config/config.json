@@ -4,8 +4,8 @@
     "password": null,
     "database": "database_development",
     "dialect": "sqlite",
-    "host": "127.0.0.1",
-    "port": 8081,
+    "httphost": "127.0.0.1",
+    "httpport": 8081,
     "logging": false
   },
   "test": {
@@ -16,10 +16,14 @@
     "dialect": "mysql"
   },
   "production": {
-    "username": "root",
-    "password": null,
-    "database": "database_production",
+    "username": "crawlapi",
+    "password": "crawlapi",
+    "database": "crawlapi",
     "host": "127.0.0.1",
-    "dialect": "mysql"
+    "port": "5432",
+    "dialect": "postgres",
+    "logging": false,
+    "httphost": "127.0.0.1",
+    "httpport": 5001
   }
 }
