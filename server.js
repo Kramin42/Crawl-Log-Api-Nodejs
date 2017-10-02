@@ -28,9 +28,14 @@ function initDownloader() {
             let filePath = path.resolve(__dirname,'sources',file.src,file.url.replace(/\\/g,'').replace(/:/g,'').replace(/\//g,'-'))
             shell.touch(filePath)
             let dlloop = () => {
-                let child = exec(`curl -Lf -o ${filePath} -C - ${file.url}`)
-                child.on('close', code => {
+                exec(`curl -Lf -o ${filePath} -C - ${file.url}`, (err, stdout, stderr) => {
                     //console.log(`download from ${file.url} finished with code ${code}`)
+                    //console.log(stdout)
+                    //console.log(stderr)
+                    if (err && stderr.substr(-4)!='416\n') {
+                        console.log(stderr)
+                        console.log(err)
+                    }
                     setTimeout(dlloop, file.period*1000)
                 })
             }
@@ -98,19 +103,27 @@ function processLine(t, file, line) {
     let rtime = lineObject['time'] || lineObject['end']
     let date = new Date(0)
     try {
-        date = new Date(`${rtime.slice(0,4)}/${parseInt(rtime.slice(4,6))+1}/${rtime.slice(6,8)} ${rtime.slice(8,10)}:${rtime.slice(10,12)}:${rtime.slice(12,14)}`)
+        date = new Date(Date.UTC(
+            parseInt(rtime.slice(0,4)),
+            parseInt(rtime.slice(4,6)),
+            parseInt(rtime.slice(6,8)),
+            parseInt(rtime.slice(8,10)),
+            parseInt(rtime.slice(10,12)),
+            parseInt(rtime.slice(12,14))
+        ))
         if (date == 'Invalid Date') date = new Date(0)
     } catch (err) {
         //console.log('Invalid Date')
         date = new Date(0)
     }
-    io.emit('crawlevent', JSON.stringify([lineObject]))
+    //io.emit('crawlevent', JSON.stringify([lineObject]))
     return db.Event.create({
             type: file.type,
             date: date,
             src: file.src,
             data: JSON.stringify(lineObject)
         }, {transaction: t})
+        .then(event => io.emit('crawlevent', JSON.stringify([transformEvent(event.get({plain: true}))])))
 }
 
 function initWeb() {
@@ -142,14 +155,7 @@ function initWeb() {
         else
             q.order = [['id', 'ASC']]
         db.Event.findAll(q).then(results => {
-            results = results.map(x => {
-                x.data = JSON.parse(x.data)
-                x.time = Math.round(new Date(x.date).getTime()/1000)
-                delete x.date
-                x.src_abbr = x.src
-                delete x.src
-                return x
-            })
+            results = results.map(transformEvent)
             let response = {
                 status: 200,
                 message: 'OK',
@@ -172,6 +178,15 @@ function initWeb() {
     server.on('error', function (err) {
         console.log('Caught server error:', err.stack)
     });
+}
+
+function transformEvent(x) {
+                x.data = JSON.parse(x.data)
+                x.time = Math.round(new Date(x.date).getTime()/1000)
+                delete x.date
+                x.src_abbr = x.src
+                delete x.src
+                return x
 }
 
 function wait(ms) {
